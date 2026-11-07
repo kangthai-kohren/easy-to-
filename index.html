@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08111d">
+  <title>Logic Circuit Laboratory</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Logic Circuit Laboratory ホーム">
+      <span class="brand-mark" aria-hidden="true">⌁</span>
+      <span><strong>LOGIC CIRCUIT</strong><small>LABORATORY / 01</small></span>
+    </a>
+    <div class="top-status"><span class="status-dot"></span> SIMULATOR ONLINE <span class="divider">/</span> DIGITAL SYSTEMS</div>
+  </header>
+
+  <main class="shell">
+    <section class="intro">
+      <div>
+        <p class="eyebrow">INTERACTIVE LEARNING TOOL</p>
+        <h1>論理回路を、<span>動かして学ぶ。</span></h1>
+        <p class="lead">入力から内部状態、出力まで。信号の伝わり方をリアルタイムに観察しよう。</p>
+      </div>
+      <div class="intro-chip"><span>5</span><small>回路モジュール</small></div>
+    </section>
+
+    <nav class="circuit-nav" aria-label="回路を選択">
+      <button class="nav-tab active" data-circuit="gates"><span>01</span> 基本論理ゲート</button>
+      <button class="nav-tab" data-circuit="rs"><span>02</span> RSラッチ・FF</button>
+      <button class="nav-tab" data-circuit="jk"><span>03</span> JKフリップフロップ</button>
+      <button class="nav-tab" data-circuit="d"><span>04</span> Dラッチ・FF</button>
+      <button class="nav-tab" data-circuit="t"><span>05</span> Tフリップフロップ</button>
+    </nav>
+
+    <section class="workbench">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow" id="circuit-index">MODULE 01 / COMBINATIONAL</p>
+          <h2 id="circuit-title">基本論理ゲート</h2>
+        </div>
+        <div class="live-badge"><span class="status-dot"></span> LIVE SIMULATION</div>
+      </div>
+
+      <div class="mode-row" id="mode-row"></div>
+      <div class="lab-grid">
+        <aside class="control-panel">
+          <div class="section-title"><span class="section-index">A</span><h3>入力パネル</h3></div>
+          <div id="input-controls"></div>
+          <div id="clock-controls"></div>
+          <div class="control-note" id="input-note"></div>
+        </aside>
+
+        <section class="circuit-panel" aria-label="回路図とシミュレーション">
+          <div class="diagram-toolbar">
+            <div class="section-title"><span class="section-index">B</span><h3>回路シミュレーション</h3></div>
+            <span class="diagram-hint"><span class="mini-led"></span> 点灯中の信号 = 1</span>
+          </div>
+          <div class="svg-wrap" id="diagram"></div>
+          <div class="signal-legend">
+            <span><i class="legend-line high"></i> HIGH (1)</span>
+            <span><i class="legend-line low"></i> LOW (0)</span>
+            <span><i class="legend-line clock"></i> CLOCK</span>
+            <span><i class="legend-line unknown"></i> 未定義 (?)</span>
+          </div>
+          <div class="stepper" id="stepper"></div>
+        </section>
+
+        <aside class="output-panel">
+          <div class="section-title"><span class="section-index">C</span><h3>状態・出力</h3></div>
+          <div id="outputs"></div>
+          <div class="event-box">
+            <span class="event-label">いま起きていること</span>
+            <p id="event-description"></p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="lower-grid">
+      <article class="info-card truth-card">
+        <div class="section-title"><span class="section-index">D</span><h3>真理値表</h3></div>
+        <div class="table-wrap" id="truth-table"></div>
+        <p class="table-caption">現在の入力・状態に一致する行をハイライトします。</p>
+      </article>
+      <article class="info-card explain-card">
+        <div class="section-title"><span class="section-index">E</span><h3>回路のしくみ</h3></div>
+        <div id="explanation"></div>
+      </article>
+    </section>
+
+    <footer><span>LOGIC CIRCUIT LABORATORY</span><span>状態は入力操作で変化します。初期状態「?」は未定義を表します。</span></footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
