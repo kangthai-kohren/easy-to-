@@ -50,6 +50,7 @@ h1 span { color: var(--green); }
 .live-badge { border: 1px solid #23503e; border-radius: 20px; color: #88deb1; padding: 7px 10px; font-size: 8px; }
 .live-badge .status-dot { width: 6px; height: 6px; }
 .mode-row { display: flex; gap: 8px; padding: 0 22px 15px; flex-wrap: wrap; }
+.mode-label { display: inline-flex; }
 .mode-select { border: 1px solid #263d53; background: #102033; color: #b7c8d8; border-radius: 6px; padding: 7px 10px; font-size: 11px; outline: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .lab-grid { border-top: 1px solid var(--border); display: grid; grid-template-columns: minmax(170px, 215px) minmax(350px, 1fr) minmax(175px, 225px); min-height: 340px; }
@@ -85,6 +86,51 @@ h1 span { color: var(--green); }
 .mini-led { display: inline-block; width: 6px; height: 6px; background: var(--green); box-shadow: 0 0 8px var(--green); border-radius: 50%; margin-right: 4px; }
 .svg-wrap { min-height: 223px; display: grid; place-items: center; overflow: hidden; }
 .circuit-svg { width: 100%; max-height: 250px; overflow: visible; }
+.logic-details { border: 1px solid #234158; border-radius: 8px; padding: 11px; margin: 0 0 12px; background: linear-gradient(135deg, #0d1e2d, #0b1724); }
+.logic-details[hidden] { display: none; }
+.logic-detail-heading { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; }
+.logic-detail-heading strong { color: var(--cyan); font: 10px "DM Mono", monospace; letter-spacing: .08em; }
+.logic-detail-heading span, .logic-detail-note { color: #7f95a8; font-size: 9px; }
+.schematic-scroll { width: 100%; overflow-x: auto; border: 1px solid #203448; border-radius: 6px; background: #091522; }
+.mil-schematic { display: block; width: 100%; min-width: 680px; max-height: 430px; }
+.mil-schematic[viewBox^="0 0 1080"] { min-width: 930px; }
+.mil-body { fill: #10283a; stroke: #8ba7ba; stroke-width: 2; stroke-linejoin: round; }
+.mil-extra { fill: none; stroke: #8ba7ba; stroke-width: 2; }
+.mil-pin { fill: none; stroke: #718ba0; stroke-width: 2; stroke-linecap: round; }
+.mil-bubble { fill: #091522; stroke: #8ba7ba; stroke-width: 2; }
+.mil-label { fill: #b5c8d8; font: 10px "DM Mono", monospace; text-anchor: middle; }
+.mil-name { fill: #71899e; font: 8px "DM Mono", monospace; text-anchor: middle; }
+.schematic-heading { fill: var(--cyan); font: 10px "DM Mono", monospace; letter-spacing: .07em; }
+.schematic-label { fill: #b1c2d0; font: 10px "DM Mono", monospace; }
+.schematic-value { font-size: 9px; }
+.schematic-led { fill: #253444; stroke: #6d8192; stroke-width: 1.4; }
+.schematic-led.on { fill: var(--green); stroke: #b0ffd5; filter: drop-shadow(0 0 5px #64f2ab99); }
+.schematic-led.clock-on { fill: var(--orange); stroke: #ffd2a5; filter: drop-shadow(0 0 5px #ffad5c99); }
+.schematic-led.unknown { fill: var(--yellow); stroke: #fff0a7; }
+.schematic-junction { fill: #a7bfd0; stroke: #091522; stroke-width: 1; }
+.schematic-caption { fill: #8096a9; font: 10px "Noto Sans JP", sans-serif; }
+.schematic-warning { fill: var(--yellow); font: 9px "Noto Sans JP", sans-serif; }
+.schematic-equation { fill: #8ea3b5; font: 9px "DM Mono", monospace; }
+.mil-ff-body { fill: #10283a; stroke: #8ba7ba; stroke-width: 2; }
+.mil-clock-edge { fill: none; stroke: #8ba7ba; stroke-width: 2; }
+.mil-ff-text { fill: #c1d1de; font: 10px "DM Mono", monospace; text-anchor: middle; }
+.logic-stage { flex: 0 0 164px; min-height: 114px; border: 1px solid #253b50; border-radius: 6px; background: #101f2e; padding: 8px; }
+.logic-stage-top { display: flex; justify-content: space-between; align-items: center; color: #6f879c; font: 8px "DM Mono", monospace; }
+.logic-stage-top b { color: var(--green); font-size: 9px; }
+.logic-stage-name { color: #d3e1ed; font: 10px "DM Mono", monospace; margin: 8px 0 6px; }
+.logic-operands { display: flex; align-items: center; gap: 4px; min-height: 28px; }
+.signal-chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #314356; border-radius: 4px; color: #a7b6c4; padding: 3px 5px; font: 10px "DM Mono", monospace; }
+.signal-chip small { color: #70859a; font-size: 8px; }
+.signal-chip.high { color: var(--green); border-color: #347653; background: #143324; }
+.signal-chip.unknown { color: var(--yellow); border-color: #776436; background: #332c18; }
+.logic-operator { color: #61798d; font: 10px "DM Mono", monospace; }
+.logic-result { display: flex; align-items: center; gap: 5px; border-top: 1px solid #213346; margin-top: 7px; padding-top: 6px; color: #8498ac; font-size: 9px; }
+.logic-result b { margin-left: auto; color: #a9bac8; font: 12px "DM Mono", monospace; }
+.logic-result-wire { width: 15px; height: 3px; border-radius: 3px; background: #435367; }
+.logic-result-wire.high { background: var(--green); box-shadow: 0 0 6px #64f2ab88; }
+.logic-result-wire.unknown { background: var(--yellow); box-shadow: 0 0 6px #f3d16f66; }
+.logic-stage code { display: block; color: #8ca2b5; font: 8px "DM Mono", monospace; white-space: normal; margin-top: 6px; }
+.logic-detail-note { line-height: 1.6; margin: 6px 0 0; }
 .wire { fill: none; stroke: #3d4d5e; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; transition: stroke .18s, filter .18s; }
 .wire.high { stroke: var(--green); filter: drop-shadow(0 0 4px #64f2ab77); }
 .wire.unknown { stroke: var(--yellow); stroke-dasharray: 5 5; }

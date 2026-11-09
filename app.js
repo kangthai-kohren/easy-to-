@@ -17,9 +17,9 @@
   };
 
   const state = {
-    circuit: "gates", gate: "AND", rsMode: "nor", dMode: "ff", edge: "rising",
+    circuit: "gates", gate: "AND", rsMode: "nor", dMode: "ff", edge: "rising", detailLevel: "block",
     inputs: { A: 0, B: 0, S: 0, R: 0, J: 0, K: 0, D: 0, T: 0 },
-    clock: 0, previousClock: 0, q: null, initialQ: null, autoTimer: null,
+    clock: 0, previousClock: 0, q: null, master: null, initialQ: null, autoTimer: null,
     step: 0, stepEdge: null, stepTarget: null, stepHistory: [], lastEvent: "回路を選択して入力を操作してください。"
   };
   const $ = (selector) => document.querySelector(selector);
@@ -32,6 +32,10 @@
     (state.circuit === "d" && state.dMode === "ff");
   const isLatch = () => state.circuit === "rs" && state.rsMode !== "clocked" ||
     state.circuit === "d" && state.dMode === "latch";
+  const masterTransparent = (clock = state.clock, edge = state.edge) => edge === "rising" ? clock === 0 : clock === 1;
+  function refreshDMaster() {
+    if (state.circuit === "d" && state.dMode === "ff" && masterTransparent()) state.master = state.inputs.D;
+  }
   const displayBit = (value) => value === null || value === undefined ? "?" : String(value);
 
   function setEvent(text) {
@@ -54,24 +58,26 @@
   function renderModes() {
     const select = (id, label, options, value) =>
       `<label class="mode-label"><span class="sr-only">${label}</span><select class="mode-select" id="${id}" aria-label="${label}">${options.map(([v, n]) => `<option value="${v}" ${value === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
-    let markup = "";
+    let markup = select("detail-mode", "回路図の詳細度", [["block","機能ブロック表示"],["gate","MILゲート接続図（ゲートレベル）"]], state.detailLevel);
     if (state.circuit === "gates") {
-      markup = select("gate-mode", "論理ゲート", [["AND","AND"],["OR","OR"],["NOT","NOT"],["NAND","NAND"],["NOR","NOR"],["XOR","XOR"],["XNOR","XNOR"]], state.gate);
+      markup += select("gate-mode", "論理ゲート", [["AND","AND"],["OR","OR"],["NOT","NOT"],["NAND","NAND"],["NOR","NOR"],["XOR","XOR"],["XNOR","XNOR"]], state.gate);
     } else if (state.circuit === "rs") {
-      markup = select("rs-mode", "RS回路の種類", [["nor","NOR型ラッチ（S/R 有効 HIGH）"],["nand","NAND型ラッチ（S̅/R̅ 有効 LOW）"],["clocked","クロック付きRS-FF（エッジ動作）"]], state.rsMode);
+      markup += select("rs-mode", "RS回路の種類", [["nor","NOR型ラッチ（S/R 有効 HIGH）"],["nand","NAND型ラッチ（S̅/R̅ 有効 LOW）"],["clocked","クロック付きRS-FF（エッジ動作）"]], state.rsMode);
     } else if (state.circuit === "d") {
-      markup = select("d-mode", "D回路の種類", [["latch","Dラッチ（レベル動作）"],["ff","D-FF（エッジ動作）"]], state.dMode);
+      markup += select("d-mode", "D回路の種類", [["latch","Dラッチ（レベル動作）"],["ff","D-FF（エッジ動作）"]], state.dMode);
     }
     if (["jk","t","d"].includes(state.circuit) || state.circuit === "rs" && state.rsMode === "clocked") {
-      markup += select("edge-mode", "有効クロックエッジ", [["rising","立ち上がりエッジ"],["falling","立ち下がりエッジ"]], state.edge);
+      markup += select("edge-mode", "有効クロックエッジ", [["rising","ポジティブエッジ（立ち上がり ↑）"],["falling","ネガティブエッジ（立ち下がり ↓）"]], state.edge);
     }
     modeRow.innerHTML = markup;
     modeRow.querySelectorAll("select").forEach((el) => el.addEventListener("change", (event) => {
       const { id, value } = event.target;
+      if (id === "detail-mode") state.detailLevel = value;
       if (id === "gate-mode") state.gate = value;
       if (id === "rs-mode") { state.rsMode = value; state.q = null; state.initialQ = null; }
-      if (id === "d-mode") { state.dMode = value; state.q = null; state.initialQ = null; }
-      if (id === "edge-mode") state.edge = value;
+      if (id === "d-mode") { state.dMode = value; state.q = null; state.master = null; state.initialQ = null; }
+      if (id === "edge-mode") { state.edge = value; state.master = null; }
+      refreshDMaster();
       stopClock();
       state.step = 0;
       state.stepHistory = [];
@@ -93,6 +99,7 @@
       button.addEventListener("click", () => {
         const key = button.dataset.input;
         state.inputs[key] = 1 - state.inputs[key];
+        refreshDMaster();
         state.step = 0;
         state.stepHistory = [];
         if (state.circuit === "gates") setEvent("入力が変化し、組み合わせ論理の出力が更新されました。");
@@ -176,8 +183,8 @@
       else if (J === 1 && K === 0) { next = 1; setEvent("有効エッジ：J=1, K=0を取り込みSET。Q=1です。"); }
       else { next = state.q === null ? null : 1 - state.q; setEvent(state.q === null ? "J=K=1で反転しますが、初期Qが未定義のためQも未定義です。" : `有効エッジ：J=K=1なのでQを反転し、Q=${next}になりました。`); }
     } else if (state.circuit === "d") {
-      next = state.inputs.D;
-      setEvent(`有効エッジでD=${state.inputs.D}を取り込み、Q=${next}になりました。`);
+      next = state.master;
+      setEvent(`有効エッジでマスターラッチの値${displayBit(state.master)}を取り込み、Q=${displayBit(next)}になりました。`);
     } else if (state.circuit === "t") {
       if (state.inputs.T === 0) setEvent("有効エッジ：T=0なのでQを保持します。");
       else { next = state.q === null ? null : 1 - state.q; setEvent(state.q === null ? "T=1で反転しますが、初期Qが未定義のためQも未定義です。" : `有効エッジ：T=1なのでQを反転し、Q=${next}になりました。`); }
@@ -191,6 +198,7 @@
       setEvent(`CLKはすでに${value ? "HIGH" : "LOW"}です。新しいエッジは発生していません。`);
       return;
     }
+    refreshDMaster();
     state.previousClock = old;
     state.clock = value;
     if (state.circuit === "d" && state.dMode === "latch") {
@@ -202,6 +210,7 @@
     const detected = edgeDetected(old, value);
     if (detected) updateOnEdge();
     else setEvent(`クロックが${value ? "HIGH" : "LOW"}になりましたが、選択中の${edgeName()}ではないためQを保持します。`);
+    refreshDMaster();
   }
 
   function gateResult() {
@@ -230,6 +239,429 @@
   }
   function wireSvg(y, label, value, x1 = 36, x2 = 168, clock = false) {
     return `<path class="${wireClass(value, clock)}" d="M${x1} ${y} H${x2}"/><text class="svg-label" x="${x1 - 25}" y="${y + 4}">${label}</text><text class="${valueClass(value, clock)}" x="${(x1+x2)/2 - 7}" y="${y - 9}">${displayBit(value)}</text><circle class="led ${value === 1 ? "high" : value === null ? "unknown" : ""}" cx="${x2}" cy="${y}" r="5"/>`;
+  }
+
+  function logicNot(value) {
+    return value === null ? null : 1 - value;
+  }
+  function logicAnd(a, b) {
+    if (a === 0 || b === 0) return 0;
+    return a === 1 && b === 1 ? 1 : null;
+  }
+  function logicOr(a, b) {
+    if (a === 1 || b === 1) return 1;
+    return a === 0 && b === 0 ? 0 : null;
+  }
+
+  function buildLogicStages() {
+    const stages = [];
+    const add = (gate, name, terms, value, equation) => stages.push({ gate, name, terms, value, equation });
+    const { A, B, D, J, K, S, R, T } = state.inputs;
+    const q = state.q;
+    const qbar = logicNot(q);
+
+    if (state.circuit === "gates") {
+      if (state.gate === "NOT") add("NOT", "Y", [["A", A]], logicNot(A), `Y = ¬A`);
+      else if (state.gate === "NAND" || state.gate === "NOR") {
+        const inner = state.gate === "NAND" ? logicAnd(A, B) : logicOr(A, B);
+        add(state.gate === "NAND" ? "AND" : "OR", "X", [["A", A], ["B", B]], inner, `X = A ${state.gate === "NAND" ? "∧" : "∨"} B`);
+        add("NOT", "OUT", [["X", inner]], logicNot(inner), `OUT = ¬X`);
+      } else if (state.gate === "XOR" || state.gate === "XNOR") {
+        const nA = logicNot(A), nB = logicNot(B);
+        const p = logicAnd(A, nB), r = logicAnd(nA, B), xor = logicOr(p, r);
+        add("NOT", "¬A", [["A", A]], nA, "¬A");
+        add("NOT", "¬B", [["B", B]], nB, "¬B");
+        add("AND", "P", [["A", A], ["¬B", nB]], p, "P = A ∧ ¬B");
+        add("AND", "R", [["¬A", nA], ["B", B]], r, "R = ¬A ∧ B");
+        add("OR", "XOR", [["P", p], ["R", r]], xor, "XOR = P ∨ R");
+        if (state.gate === "XNOR") add("NOT", "OUT", [["XOR", xor]], logicNot(xor), "OUT = ¬XOR");
+      } else {
+        const value = state.gate === "AND" ? logicAnd(A, B) : logicOr(A, B);
+        add(state.gate, "OUT", [["A", A], ["B", B]], value, `OUT = A ${state.gate === "AND" ? "∧" : "∨"} B`);
+      }
+      return { stages, note: "組み合わせ論理: 入力が変わると各ゲート出力も即時に再計算されます。" };
+    }
+
+    if (state.circuit === "rs" && state.rsMode !== "clocked") {
+      const activeHigh = state.rsMode === "nor";
+      const set = activeHigh ? S === 1 : S === 0;
+      const reset = activeHigh ? R === 1 : R === 0;
+      const gate = activeHigh ? "NOR" : "NAND";
+      const gateQ = set && reset ? null : activeHigh ? logicNot(logicOr(R, qbar)) : logicNot(logicAnd(R, qbar));
+      const gateQbar = set && reset ? null : activeHigh ? logicNot(logicOr(S, q)) : logicNot(logicAnd(S, q));
+      add(gate, "Q", [[activeHigh ? "R" : "R̅", R], ["Q̅", qbar]], gateQ, activeHigh ? "Q = ¬(R ∨ Q̅)" : "Q = ¬(R̅ ∧ Q̅)");
+      add(gate, "Q̅", [[activeHigh ? "S" : "S̅", S], ["Q", q]], gateQbar, activeHigh ? "Q̅ = ¬(S ∨ Q)" : "Q̅ = ¬(S̅ ∧ Q)");
+      return { stages, note: `相互帰還した${gate}ゲート。各ゲート出力を相手側の入力へ戻し、状態を保持します。${set && reset ? " 禁止入力のため出力は未定義として表示しています。" : ""}` };
+    }
+
+    if (state.circuit === "d" && state.dMode === "ff") {
+      const nClock = logicNot(state.clock);
+      const masterEnable = state.edge === "rising" ? nClock : state.clock;
+      const slaveEnable = state.edge === "rising" ? state.clock : nClock;
+      const masterData = logicAnd(masterEnable, D);
+      const masterHold = logicAnd(logicNot(masterEnable), state.master);
+      const masterNext = logicOr(masterData, masterHold);
+      const slaveData = logicAnd(slaveEnable, state.master);
+      const slaveHold = logicAnd(logicNot(slaveEnable), q);
+      add("NOT", "¬CLK", [["CLK", state.clock]], nClock, "¬CLK");
+      add("AND", "MASTER DATA", [["MASTER EN", masterEnable], ["D", D]], masterData, "MASTER DATA = MASTER EN ∧ D");
+      add("AND", "MASTER HOLD", [["¬MASTER EN", logicNot(masterEnable)], ["MASTER Q", state.master]], masterHold, "MASTER HOLD = ¬MASTER EN ∧ MASTER Q");
+      add("OR", "MASTER Q(next)", [["DATA", masterData], ["HOLD", masterHold]], masterNext, "MASTER Q(next) = DATA ∨ HOLD");
+      add("AND", "SLAVE DATA", [["SLAVE EN", slaveEnable], ["MASTER Q", state.master]], slaveData, "SLAVE DATA = SLAVE EN ∧ MASTER Q");
+      add("AND", "SLAVE HOLD", [["¬SLAVE EN", logicNot(slaveEnable)], ["Q", q]], slaveHold, "SLAVE HOLD = ¬SLAVE EN ∧ Q");
+      add("OR", "Q(next)", [["DATA", slaveData], ["HOLD", slaveHold]], logicOr(slaveData, slaveHold), "Q(next) = DATA ∨ HOLD");
+      return { stages, note: `マスター／スレーブD-FFを2つのAND/ORラッチで表示。${state.edge === "rising" ? "CLK=0でマスター、CLK=1でスレーブが開きます。" : "CLK=1でマスター、CLK=0でスレーブが開きます。"} 指定エッジでQが更新されます。` };
+    }
+    if (state.circuit === "d" && state.dMode === "latch") {
+      const nClock = logicNot(state.clock);
+      const open = logicAnd(state.clock, D);
+      const hold = logicAnd(nClock, q);
+      add("AND", "OPEN", [["CLK", state.clock], ["D", D]], open, "OPEN = CLK ∧ D");
+      add("NOT", "¬CLK", [["CLK", state.clock]], nClock, "¬CLK");
+      add("AND", "HOLD", [["¬CLK", nClock], ["Q", q]], hold, "HOLD = ¬CLK ∧ Q");
+      add("OR", "Q(next)", [["OPEN", open], ["HOLD", hold]], logicOr(open, hold), "Q(next) = OPEN ∨ HOLD");
+      return { stages, note: "Dラッチのレベル制御MUX。CLK=1ではDを通し、CLK=0ではQを帰還して保持します。" };
+    }
+    if (state.circuit === "jk") {
+      const nQ = logicNot(q), nK = logicNot(K);
+      const setTerm = logicAnd(J, nQ), holdTerm = logicAnd(nK, q);
+      add("NOT", "¬Q", [["Q", q]], nQ, "¬Q");
+      add("NOT", "¬K", [["K", K]], nK, "¬K");
+      add("AND", "SET", [["J", J], ["¬Q", nQ]], setTerm, "SET = J ∧ ¬Q");
+      add("AND", "HOLD/RESET", [["¬K", nK], ["Q", q]], holdTerm, "HOLD/RESET = ¬K ∧ Q");
+      add("OR", "D / Q(next)", [["SET", setTerm], ["HOLD/RESET", holdTerm]], logicOr(setTerm, holdTerm), "Q(next) = (J ∧ ¬Q) ∨ (¬K ∧ Q)");
+      return { stages, note: `JKの特性方程式をAND/OR/NOTゲートに展開。結果は${edgeName()}エッジでのみQへ取り込まれます。` };
+    }
+    if (state.circuit === "t") {
+      const nT = logicNot(T), nQ = logicNot(q);
+      const toggleTerm = logicAnd(T, nQ), holdTerm = logicAnd(nT, q);
+      add("NOT", "¬T", [["T", T]], nT, "¬T");
+      add("NOT", "¬Q", [["Q", q]], nQ, "¬Q");
+      add("AND", "TOGGLE", [["T", T], ["¬Q", nQ]], toggleTerm, "TOGGLE = T ∧ ¬Q");
+      add("AND", "HOLD", [["¬T", nT], ["Q", q]], holdTerm, "HOLD = ¬T ∧ Q");
+      add("OR", "D / Q(next)", [["TOGGLE", toggleTerm], ["HOLD", holdTerm]], logicOr(toggleTerm, holdTerm), "Q(next) = (T ∧ ¬Q) ∨ (¬T ∧ Q)");
+      return { stages, note: `T-FFの反転/保持論理をAND/OR/NOTゲートに展開。結果は${edgeName()}エッジでQへ取り込まれます。` };
+    }
+    if (state.circuit === "rs" && state.rsMode === "clocked") {
+      const nR = logicNot(R), holdTerm = logicAnd(nR, q);
+      const invalid = S === 1 && R === 1;
+      add("NOT", "¬R", [["R", R]], nR, "¬R");
+      add("AND", "HOLD", [["¬R", nR], ["Q", q]], holdTerm, "HOLD = ¬R ∧ Q");
+      add("OR", "D / Q(next)", [["S", S], ["HOLD", holdTerm]], invalid ? null : logicOr(S, holdTerm), "Q(next) = S ∨ (¬R ∧ Q)");
+      return { stages, note: `RSの次状態論理。結果は${edgeName()}エッジで取り込みます。${invalid ? " S=R=1は禁止入力のため次状態を未定義としています。" : ""}` };
+    }
+    return { stages, note: "" };
+  }
+
+  function renderLogicDetails() {
+    const root = $("#logic-details");
+    const detailed = state.detailLevel === "gate";
+    root.hidden = !detailed;
+    if (!detailed) {
+      root.innerHTML = "";
+      return;
+    }
+    const { stages, note } = buildLogicStages();
+    const schematic = renderConnectedSchematic(stages);
+    root.innerHTML = `<div class="logic-detail-heading"><strong>MIL GATE SCHEMATIC</strong><span>ゲート記号を配線で接続した回路図 / 信号値は現在のシミュレーション状態</span></div><div class="schematic-scroll">${schematic}</div><p class="logic-detail-note">${note}</p>`;
+  }
+
+  function signalClass(value, clock = false) {
+    return `wire${clock ? " clock-wire" : ""}${value === 1 ? " high" : value === null ? " unknown" : ""}`;
+  }
+  function signalPath(path, value, clock = false) {
+    return `<path class="${signalClass(value, clock)}" d="${path}"/>`;
+  }
+  function signalText(x, y, label, value, clock = false) {
+    return `<text class="${valueClass(value, clock)} schematic-value" x="${x}" y="${y}">${label ? `${label}=` : ""}${displayBit(value)}</text>`;
+  }
+  function milGate(type, x, y, count = 2, label = "") {
+    const pins = count === 3 ? [-18, 0, 18] : count === 1 ? [0] : [-12, 12];
+    const inputs = pins.map((offset) => `<path class="mil-pin" d="M${x} ${y + offset} H${x + 17}"/>`).join("");
+    let shape = "";
+    let bubble = "";
+    if (type === "NOT") {
+      shape = `<path class="mil-body" d="M${x + 17} ${y - 22} L${x + 61} ${y} L${x + 17} ${y + 22} Z"/>`;
+      bubble = `<circle class="mil-bubble" cx="${x + 68}" cy="${y}" r="5"/>`;
+    } else if (type === "OR" || type === "NOR" || type === "XOR") {
+      shape = `<path class="mil-body" d="M${x + 17} ${y - 26} Q${x + 39} ${y - 26} ${x + 72} ${y} Q${x + 39} ${y + 26} ${x + 17} ${y + 26} Q${x + 34} ${y} ${x + 17} ${y - 26} Z"/>`;
+      if (type === "XOR") shape += `<path class="mil-extra" d="M${x + 9} ${y - 26} Q${x + 26} ${y} ${x + 9} ${y + 26}"/>`;
+      if (type === "NOR") bubble = `<circle class="mil-bubble" cx="${x + 79}" cy="${y}" r="5"/>`;
+    } else {
+      shape = `<path class="mil-body" d="M${x + 17} ${y - 26} H${x + 43} A26 26 0 0 1 ${x + 43} ${y + 26} H${x + 17} Z"/>`;
+      if (type === "NAND") bubble = `<circle class="mil-bubble" cx="${x + 77}" cy="${y}" r="5"/>`;
+    }
+    const outX = type === "NAND" || type === "NOR" || type === "NOT" ? x + 84 : x + 70;
+    return `<g class="mil-gate">${inputs}${shape}${bubble}<path class="mil-pin" d="M${outX} ${y} H${outX + 13}"/><text class="mil-label" x="${x + 43}" y="${y + 4}">${type === "NOT" ? "1" : type === "OR" || type === "NOR" ? "≥1" : "="}</text>${label ? `<text class="mil-name" x="${x + 43}" y="${y - 34}">${label}</text>` : ""}</g>`;
+  }
+  function milInput(x, y, label, value, clock = false) {
+    return `${signalPath(`M${x} ${y} H${x + 34}`, value, clock)}<circle class="schematic-led ${value === 1 ? (clock ? "clock-on" : "on") : value === null ? "unknown" : ""}" cx="${x + 34}" cy="${y}" r="4"/><text class="schematic-label" x="${x}" y="${y - 9}">${label}</text>${signalText(x + 4, y + 16, "", value, clock)}`;
+  }
+  function milOutput(x, y, label, value, clock = false) {
+    return `${signalPath(`M${x} ${y} H${x + 38}`, value, clock)}<circle class="schematic-led ${value === 1 ? (clock ? "clock-on" : "on") : value === null ? "unknown" : ""}" cx="${x + 38}" cy="${y}" r="4"/><text class="schematic-label" x="${x + 44}" y="${y + 4}">${label}</text>${signalText(x + 3, y - 8, "", value, clock)}`;
+  }
+
+  function renderCrossCoupledSchematic(type, setValue, resetValue, inputLabels, width = 720) {
+    const activeHigh = type === "NOR";
+    const invalid = activeHigh ? setValue === 1 && resetValue === 1 : setValue === 0 && resetValue === 0;
+    const upperInput = activeHigh ? resetValue : setValue;
+    const lowerInput = activeHigh ? setValue : resetValue;
+    const upperLabel = inputLabels[activeHigh ? 1 : 0];
+    const lowerLabel = inputLabels[activeHigh ? 0 : 1];
+    const qbar = state.q === null ? null : 1 - state.q;
+    const qValue = invalid ? (activeHigh ? 0 : 1) : activeHigh
+      ? logicNot(logicOr(upperInput, qbar)) : logicNot(logicAnd(upperInput, qbar));
+    const qbarValue = invalid ? (activeHigh ? 0 : 1) : activeHigh
+      ? logicNot(logicOr(lowerInput, state.q)) : logicNot(logicAnd(lowerInput, state.q));
+    const gx = 285, top = 105, bottom = 245;
+    let svg = `<svg class="mil-schematic" viewBox="0 0 ${width} 350" role="img" aria-label="${type}ゲート2個を相互接続した${type}型RSラッチのMIL回路図">`;
+    svg += `<text class="schematic-heading" x="30" y="28">CROSS-COUPLED ${type} / 2-GATE RS LATCH</text>`;
+    svg += signalPath(`M35 ${top - 12} H${gx}`, upperInput) + signalText(75, top - 19, upperLabel, upperInput);
+    svg += signalPath(`M35 ${bottom - 12} H${gx}`, lowerInput) + signalText(75, bottom - 19, lowerLabel, lowerInput);
+    svg += signalPath(`M${gx + 84} ${top} H625`, qValue) + signalText(470, top - 10, "Q", qValue);
+    svg += signalPath(`M${gx + 84} ${bottom} H625`, qbarValue) + signalText(470, bottom - 10, "Q̅", qbarValue);
+    svg += signalPath(`M${gx + 84} ${top} H${gx + 130} V${bottom + 12} H${gx}`, qValue);
+    svg += signalPath(`M${gx + 84} ${bottom} H${gx + 185} V${top + 12} H${gx}`, qbarValue);
+    svg += milGate(type, gx, top, 2, "G1") + milGate(type, gx, bottom, 2, "G2");
+    svg += `<circle class="schematic-junction" cx="${gx + 84}" cy="${top}" r="3"/><circle class="schematic-junction" cx="${gx + 84}" cy="${bottom}" r="3"/>`;
+    svg += `<text class="schematic-caption" x="35" y="320">${type === "NAND" ? "S̅=0: SET  /  R̅=0: RESET  /  S̅=R̅=0: 禁止入力" : "S=1: SET  /  R=1: RESET  /  S=R=1: 禁止入力"}</text>`;
+    if (invalid) svg += `<text class="schematic-warning" x="465" y="315">禁止入力: ゲート出力は双方 ${qValue}、記憶状態は未定義</text>`;
+    return `${svg}</svg>`;
+  }
+
+  function renderConnectedSchematic(stages) {
+    if (state.circuit === "gates") return renderCombinationalSchematic();
+    if (state.circuit === "rs" && state.rsMode !== "clocked") {
+      const type = state.rsMode === "nand" ? "NAND" : "NOR";
+      return renderCrossCoupledSchematic(type, state.inputs.S, state.inputs.R,
+        [state.rsMode === "nand" ? "S̅" : "S", state.rsMode === "nand" ? "R̅" : "R"]);
+    }
+    if (state.circuit === "rs" && state.rsMode === "clocked") {
+      const sg = logicAnd(state.inputs.S, state.clock), rg = logicAnd(state.inputs.R, state.clock);
+      const qbar = state.q === null ? null : 1 - state.q;
+      const invalid = sg === 1 && rg === 1;
+      const qValue = invalid ? 0 : logicNot(logicOr(rg, qbar));
+      const qbarValue = invalid ? 0 : logicNot(logicOr(sg, state.q));
+      const gx = 490, top = 105, bottom = 245;
+      let svg = `<svg class="mil-schematic" viewBox="0 0 900 350" role="img" aria-label="AND入力ゲート2個と相互接続NORゲート2個によるクロック付きRS回路">`;
+      svg += `<text class="schematic-heading" x="25" y="28">CLOCKED RS / AND GATING + CROSS-COUPLED NOR</text>`;
+      svg += signalPath("M30 93 H120", state.inputs.R) + signalText(42, 84, "R", state.inputs.R);
+      svg += signalPath("M30 117 H120", state.clock, true) + signalText(42, 133, "CLK", state.clock, true);
+      svg += signalPath("M30 233 H120", state.inputs.S) + signalText(42, 224, "S", state.inputs.S);
+      svg += signalPath("M30 257 H120", state.clock, true);
+      svg += signalPath(`M203 105 H440 V${top - 12} H${gx}`, rg) + signalText(350, 84, "R·CLK", rg);
+      svg += signalPath(`M203 245 H440 V${bottom - 12} H${gx}`, sg) + signalText(350, 224, "S·CLK", sg);
+      svg += signalPath(`M${gx + 84} ${top} H850`, qValue) + signalText(740, top - 10, "Q", qValue);
+      svg += signalPath(`M${gx + 84} ${bottom} H850`, qbarValue) + signalText(740, bottom - 10, "Q̅", qbarValue);
+      svg += signalPath(`M${gx + 84} ${top} H${gx + 115} V${bottom + 12} H${gx}`, qValue);
+      svg += signalPath(`M${gx + 84} ${bottom} H${gx + 155} V${top + 12} H${gx}`, qbarValue);
+      svg += milGate("AND", 120, 105, 2, "G1") + milGate("AND", 120, 245, 2, "G2");
+      svg += milGate("NOR", gx, top, 2, "G3") + milGate("NOR", gx, bottom, 2, "G4");
+      svg += `<circle class="schematic-junction" cx="${gx + 70}" cy="${top}" r="3"/><circle class="schematic-junction" cx="${gx + 70}" cy="${bottom}" r="3"/>`;
+      svg += `<text class="schematic-caption" x="30" y="320">CLK=1でS/Rをゲートへ通し、NORラッチにSET/RESETを伝えます。状態更新は選択エッジで判定。</text></svg>`;
+      return svg;
+    }
+
+    return renderStageSchematic(stages);
+  }
+
+  function dffSymbol(x, y, dValue, qValue, clock, edge) {
+    const qbar = qValue === null ? null : 1 - qValue;
+    const edgeMark = edge === "falling"
+      ? `<circle class="mil-bubble" cx="${x + 7}" cy="${y + 96}" r="5"/><path class="mil-clock-edge" d="M${x + 12} ${y + 84} l15 12 -15 12"/>`
+      : `<path class="mil-clock-edge" d="M${x} ${y + 84} l15 12 -15 12"/>`;
+    const clkX = edge === "falling" ? x - 5 : x;
+    return `<rect class="mil-ff-body" x="${x + 15}" y="${y + 15}" width="112" height="144" rx="6"/><text class="mil-ff-text" x="${x + 72}" y="${y + 48}">D-FF</text><text class="schematic-label" x="${x + 25}" y="${y + 82}">D</text><text class="schematic-label" x="${x + 103}" y="${y + 71}">Q</text><text class="schematic-label" x="${x + 103}" y="${y + 132}">Q̅</text>${edgeMark}${signalPath(`M${x - 35} ${y + 72} H${x + 15}`, dValue)}${signalText(x - 31, y + 63, "D", dValue)}${signalPath(`M${x + 127} ${y + 70} H${x + 175}`, qValue)}${signalText(x + 135, y + 62, "Q", qValue)}${signalPath(`M${x + 127} ${y + 130} H${x + 175}`, qbar)}${signalText(x + 135, y + 122, "Q̅", qbar)}${signalPath(`M${clkX - 35} ${y + 96} H${clkX}`, clock, true)}${signalText(clkX - 34, y + 115, `${edge === "rising" ? "↑" : "↓"} CLK`, clock, true)}`;
+  }
+
+  function renderCombinationalSchematic() {
+    const A = state.inputs.A, B = state.inputs.B;
+    const result = gateResult();
+    const oneInput = state.gate === "NOT";
+    let svg = `<svg class="mil-schematic" viewBox="0 0 640 280" role="img" aria-label="${state.gate}ゲートのMIL記号と信号値を示す回路図">`;
+    svg += `<text class="schematic-heading" x="25" y="28">COMBINATIONAL LOGIC / MIL GATE SYMBOL</text>`;
+    if (state.gate === "NAND" || state.gate === "NOR" || state.gate === "XNOR") {
+      const base = state.gate === "XNOR" ? "XOR" : state.gate;
+      const intermediate = state.gate === "NAND" ? logicAnd(A, B) : state.gate === "NOR" ? logicOr(A, B) : logicNot(result);
+      svg += signalPath(`M35 ${oneInput ? 135 : 123} H235`, A) + signalText(42, oneInput ? 125 : 114, "A", A);
+      if (!oneInput) svg += signalPath("M35 147 H235", B) + signalText(42, 166, "B", B);
+      svg += milGate(base, 235, 135, oneInput ? 1 : 2, "G1");
+      if (state.gate === "XNOR") {
+        svg += signalPath("M318 135 H385", intermediate);
+        svg += milGate("NOT", 385, 135, 1, "G2");
+        svg += signalPath("M468 135 H570", result) + signalText(520, 125, "OUT", result);
+      } else {
+        svg += signalPath("M319 135 H570", result);
+        svg += signalText(510, 125, "OUT", result);
+      }
+    } else {
+      const gate = state.gate;
+      svg += signalPath(`M35 ${oneInput ? 135 : 123} H235`, A) + signalText(42, oneInput ? 125 : 114, "A", A);
+      if (!oneInput) svg += signalPath("M35 147 H235", B) + signalText(42, 166, "B", B);
+      svg += milGate(gate, 235, 135, oneInput ? 1 : 2, "G1");
+      const outputX = gate === "NOT" ? 318 : 305;
+      svg += signalPath(`M${outputX} 135 H570`, result) + signalText(510, 125, "OUT", result);
+    }
+    svg += `<circle class="schematic-led ${A ? "on" : ""}" cx="35" cy="${oneInput ? 135 : 123}" r="4"/>`;
+    if (!oneInput) svg += `<circle class="schematic-led ${B ? "on" : ""}" cx="35" cy="147" r="4"/>`;
+    svg += `<circle class="schematic-led ${result === 1 ? "on" : ""}" cx="570" cy="135" r="4"/></svg>`;
+    return svg;
+  }
+
+  function renderJKSchematic() {
+    const { J, K } = state.inputs;
+    const qbar = state.q === null ? null : 1 - state.q;
+    const nK = logicNot(K);
+    const setTerm = logicAnd(J, qbar);
+    const holdTerm = logicAnd(nK, state.q);
+    const next = logicOr(setTerm, holdTerm);
+    let svg = `<svg class="mil-schematic" viewBox="0 0 1010 370" role="img" aria-label="JKフリップフロップの特性方程式をAND、OR、NOTゲートとD-FFで構成したMIL回路図">`;
+    svg += `<text class="schematic-heading" x="25" y="28">JK FLIP-FLOP / AND-OR IMPLEMENTATION OF NEXT-STATE LOGIC</text>`;
+    svg += signalPath("M30 108 H300", J) + signalText(38, 98, "J", J);
+    svg += signalPath("M30 240 H125", K) + signalText(38, 230, "K", K);
+    svg += signalPath("M209 240 H300 V228", nK) + signalText(225, 228, "¬K", nK);
+    svg += signalPath("M30 252 H245 V252 H300", state.q) + signalText(65, 272, "Q", state.q);
+    svg += signalPath("M383 120 H452 V158 H550", setTerm);
+    svg += signalPath("M383 240 H475 V182 H550", holdTerm);
+    svg += signalPath("M633 170 H700", next);
+    svg += signalPath("M840 150 H890", state.q) + signalText(846, 140, "Q", state.q);
+    svg += signalPath("M840 210 H925 V132 H300", qbar);
+    svg += signalPath("M840 150 H950 V252 H300", state.q);
+    svg += signalPath("M30 330 H660 V246 H700", state.clock, true) + signalText(42, 320, "CLK", state.clock, true);
+    svg += milGate("NOT", 125, 240, 1, "G1") + milGate("AND", 300, 120, 2, "G2") + milGate("AND", 300, 240, 2, "G3") + milGate("OR", 550, 170, 2, "G4");
+    svg += `<rect class="mil-ff-body" x="700" y="105" width="140" height="150" rx="6"/><text class="mil-ff-text" x="770" y="150">EDGE FF</text><text class="mil-ff-text" x="715" y="177">D</text><text class="mil-ff-text" x="819" y="155">Q</text><text class="mil-ff-text" x="812" y="215">Q̅</text>${state.edge === "falling" ? `<circle class="mil-bubble" cx="700" cy="246" r="5"/>` : ""}<path class="mil-clock-edge" d="M${state.edge === "falling" ? 705 : 700} 234 l12 12 -12 12 Z"/>`;
+    svg += `<circle class="schematic-junction" cx="383" cy="120" r="3"/><circle class="schematic-junction" cx="383" cy="240" r="3"/>`;
+    svg += `<text class="schematic-equation" x="550" y="285">D = (J ∧ Q̅) ∨ (¬K ∧ Q)</text><text class="schematic-caption" x="25" y="355">QとQ̅を帰還し、選択したクロックエッジでD相当の次状態を取り込みます。</text></svg>`;
+    return svg;
+  }
+
+  function renderTSchematic() {
+    const T = state.inputs.T;
+    const qbar = state.q === null ? null : 1 - state.q;
+    const next = logicOr(logicAnd(T, qbar), logicAnd(logicNot(T), state.q));
+    let svg = `<svg class="mil-schematic" viewBox="0 0 780 330" role="img" aria-label="TフリップフロップをXORゲートとD-FFで構成したMIL回路図">`;
+    svg += `<text class="schematic-heading" x="25" y="28">T FLIP-FLOP / XOR + EDGE-TRIGGERED D-FF</text>`;
+    svg += signalPath("M35 134 H280", T) + signalText(42, 124, "T", T);
+    svg += signalPath("M35 158 H280", state.q) + signalText(42, 178, "Q", state.q);
+    svg += signalPath("M363 146 H425", next);
+    svg += signalPath("M600 135 H650", state.q) + signalText(605, 125, "Q", state.q);
+    svg += signalPath("M600 135 H700 V158 H280", state.q);
+    svg += signalPath("M600 195 H650", state.q === null ? null : 1 - state.q) + signalText(605, 185, "Q̅", state.q === null ? null : 1 - state.q);
+    svg += signalPath("M35 275 H425 V242", state.clock, true) + signalText(42, 265, "CLK", state.clock, true);
+    svg += milGate("XOR", 280, 146, 2, "G1");
+    svg += `<rect class="mil-ff-body" x="425" y="90" width="175" height="170" rx="6"/><text class="mil-ff-text" x="512" y="145">T-FF</text><text class="mil-ff-text" x="442" y="180">T ⊕ Q</text><text class="mil-ff-text" x="578" y="139">Q</text><text class="mil-ff-text" x="570" y="211">Q̅</text>${state.edge === "falling" ? `<circle class="mil-bubble" cx="425" cy="242" r="5"/>` : ""}<path class="mil-clock-edge" d="M${state.edge === "falling" ? 430 : 425} 230 l12 12 -12 12 Z"/>`;
+    svg += `<text class="schematic-equation" x="280" y="220">D = T ⊕ Q</text><text class="schematic-caption" x="25" y="315">XORがT=0でQを保持、T=1で反転する次状態を作り、選択エッジで保存します。</text></svg>`;
+    return svg;
+  }
+
+  function renderDSchematic() {
+    const D = state.inputs.D;
+    if (state.dMode === "ff") {
+      const masterEnable = state.edge === "rising" ? 1 - state.clock : state.clock;
+      const slaveEnable = 1 - masterEnable;
+      const mData = logicAnd(masterEnable, D);
+      const mHold = logicAnd(1 - masterEnable, state.master);
+      const master = logicOr(mData, mHold);
+      const sData = logicAnd(slaveEnable, master);
+      const sHold = logicAnd(1 - slaveEnable, state.q);
+      const qNext = logicOr(sData, sHold);
+      const qbar = state.q === null ? null : 1 - state.q;
+      const nClock = logicNot(state.clock);
+      const masterHoldEnable = 1 - masterEnable;
+      const slaveHoldEnable = 1 - slaveEnable;
+      let svg = `<svg class="mil-schematic" viewBox="0 0 1190 400" role="img" aria-label="AND、ORゲートで構成したマスター・スレーブDフリップフロップ回路図">`;
+      svg += `<text class="schematic-heading" x="25" y="28">MASTER-SLAVE D FLIP-FLOP / AND-OR LATCHES</text>`;
+      svg += `<rect class="schematic-module" x="105" y="54" width="405" height="290" rx="7"/><text class="mil-ff-text" x="307" y="75">MASTER LATCH</text>`;
+      svg += `<rect class="schematic-module" x="590" y="54" width="405" height="290" rx="7"/><text class="mil-ff-text" x="792" y="75">SLAVE LATCH</text>`;
+      svg += signalPath("M35 98 H135", D) + signalText(42, 89, "D", D);
+      svg += signalPath("M35 122 H135", masterEnable, true) + signalText(42, 140, "M-EN", masterEnable, true);
+      svg += signalPath("M35 238 H135", masterHoldEnable, true) + signalText(42, 256, "M-HOLD", masterHoldEnable, true);
+      svg += signalPath("M35 262 H135", state.master);
+      svg += signalPath("M218 110 H280 V163 H350", mData);
+      svg += signalPath("M218 250 H310 V187 H350", mHold);
+      svg += signalPath("M433 175 H475 V262 H135", master);
+      svg += signalText(437, 165, "MASTER Q", master);
+      svg += signalPath("M475 175 H535 V98 H720", master);
+      svg += signalText(500, 89, "MASTER Q", master);
+      svg += signalPath("M620 122 H720", slaveEnable, true) + signalText(623, 140, "S-EN", slaveEnable, true);
+      svg += signalPath("M620 238 H720", slaveHoldEnable, true) + signalText(623, 256, "S-HOLD", slaveHoldEnable, true);
+      svg += signalPath("M620 262 H720", state.q);
+      svg += signalPath("M803 110 H860 V163 H930", sData);
+      svg += signalPath("M803 250 H890 V187 H930", sHold);
+      svg += signalPath("M1013 175 H1120", qNext) + signalText(1032, 165, "Q(next)", qNext);
+      svg += signalPath("M1013 175 H1050 V262 H720", state.q);
+      svg += milGate("AND", 135, 110, 2, "G1") + milGate("AND", 135, 250, 2, "G2") + milGate("OR", 350, 175, 2, "G3");
+      svg += milGate("AND", 720, 110, 2, "G4") + milGate("AND", 720, 250, 2, "G5") + milGate("OR", 930, 175, 2, "G6");
+      svg += `<circle class="schematic-junction" cx="433" cy="175" r="3"/><circle class="schematic-junction" cx="1013" cy="175" r="3"/>`;
+      svg += `<text class="schematic-equation" x="135" y="322">MASTER(next) = (M-EN ∧ D) ∨ (M-HOLD ∧ MASTER)</text><text class="schematic-equation" x="720" y="322">Q(next) = (S-EN ∧ MASTER) ∨ (S-HOLD ∧ Q)</text>`;
+      svg += `<text class="schematic-caption" x="25" y="394">${state.edge === "rising" ? "立ち上がり選択: CLK=0でMASTERがDを追従し、CLK=1でSLAVEがQを更新します。" : "立ち下がり選択: CLK=1でMASTERがDを追従し、CLK=0でSLAVEがQを更新します。"} Q̅=${displayBit(qbar)}</text></svg>`;
+      return svg;
+    }
+
+    const nD = logicNot(D);
+    const setBar = logicNot(logicAnd(D, state.clock));
+    const resetBar = logicNot(logicAnd(nD, state.clock));
+    const qbar = state.q === null ? null : 1 - state.q;
+    const qValue = logicNot(logicAnd(setBar, qbar));
+    const qbarValue = logicNot(logicAnd(resetBar, state.q));
+    let svg = `<svg class="mil-schematic" viewBox="0 0 940 360" role="img" aria-label="NOTと4個のNANDゲートを接続したDラッチのMIL回路図">`;
+    svg += `<text class="schematic-heading" x="25" y="28">D LATCH / 1 INVERTER + 4 NAND GATES</text>`;
+    svg += signalPath("M30 88 H260", D) + signalText(38, 78, "D", D);
+    svg += signalPath("M60 88 V275 H145", D);
+    svg += `<circle class="schematic-junction" cx="60" cy="88" r="3"/>`;
+    svg += signalPath("M213 275 H235 V228 H260", nD) + signalText(224, 265, "¬D", nD);
+    svg += signalPath("M30 135 H115 V112 H260", state.clock, true) + signalText(38, 155, "EN/CLK", state.clock, true);
+    svg += signalPath("M115 135 V252 H260", state.clock, true);
+    svg += signalPath("M344 100 H500 V88 H570", setBar);
+    svg += signalPath("M344 240 H500 V228 H570", resetBar);
+    svg += signalPath("M654 100 H900", qValue) + signalText(800, 90, "Q", qValue);
+    svg += signalPath("M654 240 H900", qbarValue) + signalText(800, 230, "Q̅", qbarValue);
+    svg += signalPath("M654 100 H720 V252 H570", qValue);
+    svg += signalPath("M654 240 H760 V112 H570", qbarValue);
+    svg += milGate("NOT", 145, 275, 1, "G1") + milGate("NAND", 260, 100, 2, "G2") + milGate("NAND", 260, 240, 2, "G3") + milGate("NAND", 570, 100, 2, "G4") + milGate("NAND", 570, 240, 2, "G5");
+    svg += `<text class="schematic-caption" x="25" y="330">EN=1でDからSET̅/RESET̅を生成。EN=0では相互帰還したNANDラッチがQを保持します。</text></svg>`;
+    return svg;
+  }
+
+  function renderStageSchematic(stages) {
+    if (state.circuit === "jk") return renderJKSchematic();
+    if (state.circuit === "t") return renderTSchematic();
+    if (state.circuit === "d") return renderDSchematic();
+    const width = Math.max(760, 150 + stages.length * 140);
+    let svg = `<svg class="mil-schematic" viewBox="0 0 ${width} 330" role="img" aria-label="順序回路のゲートレベルMIL回路図">`;
+    svg += `<text class="schematic-heading" x="24" y="28">${state.circuit.toUpperCase()} / GATE-LEVEL NEXT-STATE LOGIC</text>`;
+    const top = 155;
+    stages.forEach((stage, index) => {
+      const x = 70 + index * 138;
+      const value = stage.value;
+      if (index > 0) {
+        const previous = stages[index - 1];
+        const prevX = 70 + (index - 1) * 138;
+        svg += signalPath(`M${prevX + 98} ${top} H${x}`, previous.value);
+        svg += signalText(prevX + 103, top - 9, previous.name, previous.value);
+      }
+      const gateType = stage.gate === "WIRE" ? "AND" : stage.gate;
+      const count = stage.terms.length;
+      svg += milGate(gateType, x, top, count, `G${index + 1}`);
+      stage.terms.forEach(([label, termValue], termIndex) => {
+        const pinY = count === 1 ? top : count === 3 ? top + [-18, 0, 18][termIndex] : top + [-12, 12][termIndex];
+        svg += signalPath(`M${x - 34} ${pinY} H${x}`, termValue);
+        svg += signalText(x - 31, pinY - 5, label, termValue);
+      });
+      svg += signalPath(`M${x + 98} ${top} H${x + 120}`, value);
+      svg += signalText(x + 103, top + 20, stage.name, value);
+      svg += `<text class="schematic-equation" x="${x - 25}" y="260">${stage.equation}</text>`;
+    });
+    const last = stages[stages.length - 1];
+    const finalX = 70 + (stages.length - 1) * 138 + 120;
+    svg += `<rect class="mil-ff-body" x="${finalX + 25}" y="95" width="100" height="120" rx="6"/><path class="mil-clock-edge" d="M${finalX + 25} 185 l12 10 -12 10 Z"/><text class="mil-ff-text" x="${finalX + 75}" y="145">DFF</text><text class="mil-ff-text" x="${finalX + 40}" y="120">D</text>`;
+    svg += signalPath(`M${finalX} ${top} H${finalX + 25}`, last ? last.value : null);
+    svg += signalText(finalX + 4, top - 10, "D", last ? last.value : null);
+    svg += signalPath(`M${finalX + 125} 135 H${finalX + 165}`, state.q) + signalText(finalX + 132, 125, "Q", state.q);
+    svg += signalPath(`M${finalX + 125} 175 H${finalX + 165}`, state.q === null ? null : 1 - state.q) + signalText(finalX + 132, 165, "Q̅", state.q === null ? null : 1 - state.q);
+    svg += signalPath(`M${finalX + 75} 270 V255`, state.clock, true) + signalText(finalX + 80, 275, `${edgeName()} CLK`, state.clock, true);
+    svg += `</svg>`;
+    return svg;
   }
 
   function renderDiagram() {
@@ -279,6 +711,7 @@
     }
     svg += `</svg>`;
     $("#diagram").innerHTML = svg;
+    renderLogicDetails();
   }
 
   function renderOutputs() {
@@ -291,6 +724,7 @@
     $("#outputs").querySelectorAll("[data-initial]").forEach((button) => button.addEventListener("click", () => {
       state.q = Number(button.dataset.initial);
       state.initialQ = state.q;
+      refreshDMaster();
       state.step = 0;
       state.stepHistory = [];
       setEvent(`実験用初期条件としてQ=${state.q}を設定しました。非同期SET/RESET入力による動作ではありません。`);
@@ -390,13 +824,14 @@
         state.clock = previous.clock;
         state.previousClock = previous.previousClock;
         state.q = previous.q;
+        state.master = previous.master;
         state.lastEvent = previous.lastEvent;
       }
     } else {
       if (state.step === -1) return;
       state.stepHistory.push({
         step: state.step, stepEdge: state.stepEdge, stepTarget: state.stepTarget, clock: state.clock,
-        previousClock: state.previousClock, q: state.q, lastEvent: state.lastEvent
+        previousClock: state.previousClock, q: state.q, master: state.master, lastEvent: state.lastEvent
       });
       if (state.step === 2) {
         const isDLevel = state.circuit === "d" && state.dMode === "latch";
@@ -405,10 +840,12 @@
         const baseline = isDLevel ? 0 : 1 - target;
         state.previousClock = state.clock;
         state.clock = baseline;
+        refreshDMaster();
         state.stepEdge = false;
         setEvent(`STEP 3: CLKを${baseline ? "HIGH" : "LOW"}に準備しました。`);
       } else if (state.step === 3) {
         const isDLevel = state.circuit === "d" && state.dMode === "latch";
+        refreshDMaster();
         const old = state.clock;
         state.previousClock = old;
         state.clock = isDLevel ? 1 : state.stepTarget;
@@ -459,11 +896,13 @@
     stopClock();
     state.circuit = tab.dataset.circuit;
     state.q = null;
+    state.master = null;
     state.initialQ = null;
     state.clock = 0;
     state.previousClock = 0;
     state.step = 0;
     state.stepHistory = [];
+    refreshDMaster();
     setEvent(state.circuit === "gates" ? "入力を切り替えると出力が即時に再計算されます。" : "初期状態は未定義です。入力とクロックを操作して動作を確認してください。");
     render();
   }));
